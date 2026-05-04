@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Search, UploadCloud, Sparkles, Radio, ListMusic, MessageSquareText } from "lucide-react";
+import { Search, UploadCloud, Radio, ListMusic, MessageSquareText, FileSpreadsheet } from "lucide-react";
 import { APP_CONFIG } from "@/config/app-theme";
 
 export default function Home() {
@@ -40,18 +40,11 @@ export default function Home() {
                 Prompt playlist
               </Link>
               <Link
-                href="/create-playlist"
+                href="/creator/bulk-csv"
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/70 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-primary/50 hover:text-white"
               >
-                <Sparkles className="h-4 w-4" />
-                Energy curve playlist
-              </Link>
-              <Link
-                href="/search"
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/70 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-primary/50 hover:text-white"
-              >
-                <Search className="h-4 w-4" />
-                Search Tracks
+                <FileSpreadsheet className="h-4 w-4" />
+                Bulk CSV ingest
               </Link>
               <Link
                 href="/browse"
@@ -169,13 +162,13 @@ export default function Home() {
             </p>
           </Link>
           <Link
-            href="/create-playlist"
+            href="/creator/bulk-csv"
             className="group rounded-2xl border border-slate-700/70 bg-slate-900/60 p-6 transition hover:-translate-y-0.5 hover:border-primary/45"
           >
-            <Sparkles className="mb-4 h-6 w-6 text-primary" />
-            <h2 className="text-xl font-bold">Energy curve playlist</h2>
+            <FileSpreadsheet className="mb-4 h-6 w-6 text-primary" />
+            <h2 className="text-xl font-bold">Bulk CSV ingest</h2>
             <p className="mt-2 text-sm text-slate-300">
-              Structured sets by event type, genres, and segment energy flow.
+              Upload a catalog CSV, queue rows, and ingest audio or YouTube metadata with embeddings.
             </p>
           </Link>
 
