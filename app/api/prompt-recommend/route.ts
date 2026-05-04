@@ -80,6 +80,7 @@ export async function POST(req: Request) {
         SELECT
           id,
           track_name AS name,
+          release_name,
           artist_names[1] AS artist,
           track_url,
           bpm,
@@ -194,6 +195,7 @@ export async function POST(req: Request) {
       return {
         id: r.id,
         name: r.name,
+        releaseName: r.release_name != null ? String(r.release_name) : null,
         artist: r.artist || 'Unknown',
         trackUrl: r.track_url ?? null,
         bpm: r.bpm,

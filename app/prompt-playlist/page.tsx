@@ -16,6 +16,7 @@ import type { DjParsedFilters } from "@/lib/llm/dj-filters";
 type RecTrack = {
   id: string;
   name: string;
+  releaseName: string | null;
   artist: string;
   trackUrl: string | null;
   bpm: number | null;
@@ -25,6 +26,11 @@ type RecTrack = {
   energy: string;
   energyValue: number;
 };
+
+function cardHeading(t: RecTrack): string {
+  const r = t.releaseName?.trim();
+  return r ? `${r} : ${t.name}` : t.name;
+}
 
 function splitList(s: string): string[] {
   return s
@@ -471,7 +477,7 @@ export default function PromptPlaylistPage() {
                   key={t.id}
                   className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4"
                 >
-                  <div className="font-semibold text-white">{t.name}</div>
+                  <div className="font-semibold text-white">{cardHeading(t)}</div>
                   <div className="text-sm text-slate-400">{t.artist}</div>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
                     {t.bpm != null && <span>{t.bpm} BPM</span>}
@@ -486,7 +492,7 @@ export default function PromptPlaylistPage() {
                       onClick={() =>
                         setPlayingUrl({
                           url: t.trackUrl,
-                          title: t.name,
+                          title: cardHeading(t),
                           artist: t.artist,
                           bpm: t.bpm,
                         })
