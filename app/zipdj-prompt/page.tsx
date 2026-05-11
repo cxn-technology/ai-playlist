@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Loader2, Radio, Sparkles } from "lucide-react";
 import { AudioPlayer } from "@/components/audio-player";
@@ -28,12 +28,6 @@ type ZipdjRecTrack = {
   vecDist?: number;
 };
 
-function groupKey(t: ZipdjRecTrack): string {
-  const id = t.releaseId?.trim();
-  if (id) return `id:${id}`;
-  return `name:${(t.releaseName || t.trackId).toLowerCase()}`;
-}
-
 export default function ZipdjPromptPage() {
   const [promptText, setPromptText] = useState("");
   const [parsed, setParsed] = useState<ZipdjParsedPrompt | null>(null);
@@ -41,7 +35,7 @@ export default function ZipdjPromptPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-  const [tavilyRaw, setTavilyRaw] = useState<unknown | null>(null);
+  const [aiSdkDebug, setAiSdkDebug] = useState<unknown | null>(null);
   const [webGuessList, setWebGuessList] = useState<WebGuessRow[] | null>(null);
   const [playingUrl, setPlayingUrl] = useState<{
     url: string;
@@ -49,20 +43,10 @@ export default function ZipdjPromptPage() {
     subtitle: string;
   } | null>(null);
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, ZipdjRecTrack[]>();
-    for (const t of tracks) {
-      const k = groupKey(t);
-      if (!map.has(k)) map.set(k, []);
-      map.get(k)!.push(t);
-    }
-    return Array.from(map.entries());
-  }, [tracks]);
-
   async function runPrompt() {
     setError(null);
     setInfo(null);
-    setTavilyRaw(null);
+    setAiSdkDebug(null);
     setWebGuessList(null);
     if (!promptText.trim()) {
       setError("Enter a prompt.");
@@ -80,14 +64,14 @@ export default function ZipdjPromptPage() {
       setParsed(data.parsed ?? null);
       setTracks(data.tracks ?? []);
       if (data.message) setInfo(data.message);
-      setTavilyRaw(data.tavilyResponse ?? null);
+      setAiSdkDebug(data.aiSdkWeb ?? null);
       const guess = data.webExtractedCandidates;
       setWebGuessList(Array.isArray(guess) ? guess : null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed");
       setParsed(null);
       setTracks([]);
-      setTavilyRaw(null);
+      setAiSdkDebug(null);
       setWebGuessList(null);
     } finally {
       setLoading(false);
@@ -96,7 +80,7 @@ export default function ZipdjPromptPage() {
 
   return (
     <div className="min-h-screen bg-[#070b14] text-slate-100">
-      <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
+      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
         <Link
           href="/"
           className="mb-8 inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white"
@@ -104,18 +88,38 @@ export default function ZipdjPromptPage() {
           <ArrowLeft className="h-4 w-4" /> Home
         </Link>
 
-        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/35 bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-primary">
-          <Radio className="h-3.5 w-3.5" />
-          ZipDJ catalog
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <div className="inline-flex items-center gap-2 rounded-full border border-primary/35 bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-primary">
+            <Radio className="h-3.5 w-3.5" />
+            ZipDJ catalog
+          </div>
+          <Link
+            href="/zipdj-catalog"
+            className="text-xs font-semibold text-slate-500 underline-offset-2 hover:text-primary hover:underline"
+          >
+            Browse / filter catalog
+          </Link>
         </div>
 
         <h1 className="mb-2 text-3xl font-black tracking-tight sm:text-4xl">ZipDJ prompt</h1>
         <p className="mb-8 max-w-2xl text-slate-400">
-          Search the <code className="text-slate-300">zipdj_tracks_ai</code> table by vibe. Trending
-          or chart-style asks use web search (Tavily) when configured, then match titles to your
-          catalog. Display uses <strong className="font-semibold text-slate-200">release</strong> as
-          the song title and <strong className="font-semibold text-slate-200">mix</strong> as the
-          version line.
+          Search the <code className="text-slate-300">zipdj_tracks_ai</code> table by vibe. Chart /
+          trending asks use the{" "}
+          <a
+            href="https://ai-sdk.dev/"
+            className="text-primary underline-offset-2 hover:underline"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Vercel AI SDK
+          </a>{" "}
+          with OpenAI Responses + <code className="text-slate-400">web_search_preview</code>,
+          structured JSON, then nearest-neighbor match in your catalog (same 384-d embeddings).
+          Matched tracks are shown in the same table layout as{" "}
+          <Link href="/zipdj-catalog" className="text-primary underline-offset-2 hover:underline">
+            ZipDJ catalog
+          </Link>{" "}
+          (release + track, artists, label, genre, dates).
         </p>
 
         {error && (
@@ -164,12 +168,11 @@ export default function ZipdjPromptPage() {
         {webGuessList != null && webGuessList.length > 0 && (
           <div className="mt-4 rounded-2xl border border-violet-900/40 bg-slate-900/60 p-4">
             <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-violet-300/90">
-              OpenAI — titles guessed from Tavily snippets
+              Structured chart list (AI SDK + web search)
             </h2>
             <p className="mb-3 text-xs text-slate-500">
-              Parsed by your LLM from the combined Tavily text (before matching{" "}
-              <code className="text-slate-400">zipdj_tracks_ai</code>). Order is model-defined
-              “most relevant first.”
+              From <code className="text-slate-400">Output.object</code> after OpenAI web search
+              (before vector match to <code className="text-slate-400">zipdj_tracks_ai</code>).
             </p>
             <ol className="list-decimal space-y-1.5 pl-5 text-sm text-slate-200">
               {webGuessList.map((g, i) => (
@@ -186,98 +189,131 @@ export default function ZipdjPromptPage() {
 
         {parsed?.mode === "web_then_match" && webGuessList != null && webGuessList.length === 0 && (
           <p className="mt-4 text-xs text-slate-500">
-            No OpenAI-extracted titles (web failed before extraction or extractor returned an empty
-            list).
+            No structured tracks returned (web search failed or model returned an empty list).
           </p>
         )}
 
-        {tavilyRaw != null && (
+        {aiSdkDebug != null && (
           <details className="mt-4 rounded-2xl border border-cyan-900/50 bg-slate-950/80 p-4 text-sm open:shadow-lg">
             <summary className="cursor-pointer font-semibold text-cyan-300/90 select-none">
-              Tavily API response (raw JSON)
+              AI SDK web run (structured output + sources + model text)
             </summary>
             <pre className="mt-3 max-h-[min(70vh,560px)] overflow-auto rounded-xl border border-slate-800 bg-[#0a0f18] p-3 text-xs leading-relaxed text-slate-300 whitespace-pre-wrap break-words">
-              {JSON.stringify(tavilyRaw, null, 2)}
+              {JSON.stringify(aiSdkDebug, null, 2)}
             </pre>
           </details>
         )}
 
-        {tracks.length > 0 && (
-          <div className="mt-10 space-y-8">
-            <p className="text-sm text-slate-500">
-              {tracks.length} result{tracks.length === 1 ? "" : "s"} · {grouped.length} release
-              {grouped.length === 1 ? "" : "s"}
-            </p>
+        {(tracks.length > 0 || parsed || loading) && (
+          <div className="mt-10">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
+              <span>
+                {loading ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+                  </span>
+                ) : (
+                  <>
+                    {tracks.length} result{tracks.length === 1 ? "" : "s"}
+                    {parsed && (
+                      <span className="text-slate-600">
+                        {" "}
+                        · {parsed.mode === "web_then_match" ? "web + vector match" : "vector match"}
+                      </span>
+                    )}
+                  </>
+                )}
+              </span>
+            </div>
 
-            {grouped.map(([key, group]) => {
-              const head = group[0];
-              return (
-                <section
-                  key={key}
-                  className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5"
-                >
-                  <h2 className="text-lg font-bold text-white">{head.releaseName}</h2>
-                  {head.artistsName && (
-                    <p className="mt-1 text-sm text-slate-400">{head.artistsName}</p>
+            <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/40">
+              <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-800 text-xs font-bold uppercase tracking-wide text-slate-500">
+                    <th className="w-14 px-3 py-3">Play</th>
+                    <th className="px-3 py-3">Release (track)</th>
+                    <th className="px-3 py-3">Artists</th>
+                    <th className="px-3 py-3">Label</th>
+                    <th className="px-3 py-3">Genre</th>
+                    <th className="px-3 py-3">Track date</th>
+                    <th className="px-3 py-3">Release date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading && tracks.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-10 text-center text-slate-500">
+                        <span className="inline-flex items-center justify-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+                        </span>
+                      </td>
+                    </tr>
                   )}
-                  <ul className="mt-4 space-y-3">
-                    {group.map((t) => (
-                      <li
+                  {!loading && tracks.length === 0 && parsed && (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-10 text-center text-slate-500">
+                        No tracks matched. Add rows via Bulk ZipDJ CSV or widen your prompt.
+                      </td>
+                    </tr>
+                  )}
+                  {tracks.map((t) => {
+                    const releaseTrack =
+                      t.trackName?.trim() !== ""
+                        ? `${t.releaseName} (${t.trackName})`
+                        : t.releaseName;
+                    return (
+                      <tr
                         key={t.trackId}
-                        className="flex flex-wrap items-start justify-between gap-3 border-t border-slate-800/80 pt-3 first:border-t-0 first:pt-0"
+                        className="border-b border-slate-800/80 last:border-0 hover:bg-slate-800/30"
                       >
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-slate-200">
-                            {t.trackName?.trim() ? t.trackName : "Default mix"}
-                          </div>
-                          <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500">
-                            {t.releaseCreatedDate && (
-                              <span title="release_created_date">rel {t.releaseCreatedDate}</span>
-                            )}
-                            {t.trackCreatedDate && (
-                              <span title="track_created_date">trk {t.trackCreatedDate}</span>
-                            )}
-                            {t.genre && <span>{t.genre}</span>}
-                            {t.labelName && <span>{t.labelName}</span>}
-                            <span
-                              className={
-                                t.source === "web" ? "text-emerald-400/90" : "text-slate-500"
+                        <td className="px-3 py-2 align-middle">
+                          {t.trackUrl ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPlayingUrl({
+                                  url: t.trackUrl!,
+                                  title: t.releaseName,
+                                  subtitle: t.trackName || "",
+                                })
                               }
+                              className="text-xs font-bold uppercase tracking-wide text-primary hover:underline"
                             >
-                              {t.source === "web" ? "web match" : "similarity"}
-                            </span>
-                            {t.vecDist != null && (
-                              <span className="text-slate-600">Δ{t.vecDist}</span>
-                            )}
-                          </div>
-                        </div>
-                        {t.trackUrl && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setPlayingUrl({
-                                url: t.trackUrl!,
-                                title: head.releaseName,
-                                subtitle: t.trackName || "",
-                              })
-                            }
-                            className="shrink-0 text-xs font-bold uppercase tracking-wide text-primary hover:underline"
-                          >
-                            Play
-                          </button>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              );
-            })}
+                              Play
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-600">—</span>
+                          )}
+                        </td>
+                        <td className="max-w-[220px] px-3 py-2 font-medium text-slate-200">
+                          <span className="line-clamp-2" title={releaseTrack}>
+                            {releaseTrack}
+                          </span>
+                        </td>
+                        <td className="max-w-[160px] px-3 py-2 text-slate-400">
+                          <span className="line-clamp-2">{t.artistsName || "—"}</span>
+                        </td>
+                        <td className="max-w-[140px] px-3 py-2 text-slate-400">
+                          <span className="line-clamp-2">{t.labelName || "—"}</span>
+                        </td>
+                        <td className="max-w-[120px] px-3 py-2 text-slate-400">
+                          <span className="line-clamp-2">{t.genre || "—"}</span>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 text-slate-500">
+                          {t.trackCreatedDate || "—"}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 text-slate-500">
+                          {t.releaseCreatedDate || "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
-        {parsed && tracks.length === 0 && !loading && (
-          <p className="mt-8 text-slate-500">No tracks matched. Add rows via Bulk ZipDJ CSV or widen your prompt.</p>
-        )}
       </div>
 
       {playingUrl && (

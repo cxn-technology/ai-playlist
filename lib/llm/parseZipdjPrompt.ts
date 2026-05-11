@@ -6,20 +6,32 @@ const MODEL = process.env.OPENAI_PROMPT_MODEL || 'gpt-4o-mini';
 
 export type { ZipdjParsedPrompt, ZipdjPromptMode };
 
-const SYSTEM = `You are routing music discovery requests for a DJ catalog (ZipDJ metadata only: release titles, mix names, genres, tags).
+function routerSystemWithToday(): string {
+  const today = new Date().toISOString().slice(0, 10);
+  return `You are routing music discovery requests for a DJ catalog (ZipDJ metadata only: release titles, mix names, genres, tags).
+
+Reference date (for interpreting "this week", "new", charts): ${today}
 
 Decide the mode:
 - semantic_only: User describes vibe, mood, genre mix, BPM intent, party context, era — searchable with text embeddings over catalog metadata. No need for live charts or "what is trending now on Spotify/Billboard".
-- web_then_match: User explicitly wants current trends, Spotify/top charts, \"best X of 2024\", Billboard-style lists, or other facts that require up-to-date web search. You must also craft web_query: a concise English web search query (no quotes needed) that would return song titles and artists.
+- web_then_match: User explicitly wants current trends, Spotify/top charts, \"best X of 2024\", Billboard-style lists, or other facts that require up-to-date web search. You must also craft web_query: a tight English search phrase (no quotes) that would surface song titles + artists on official charts or major playlists. If the user said "this week", "this month", "this year", or "last N days", weave the same timeframe into web_query in plain words (exact calendar dates are added server-side).
 
 Always produce embedding_narrative: 3–6 sentences rich in musical vocabulary, genres, energy, audience, occasion — this text will be embedded for cosine search against the catalog.
 
-requested_count: integer number of tracks the user wants; if unspecified use 15.
+requested_count: integer number of tracks the user wants; if unspecified use 20.
 
 Respond with JSON only, no markdown.`;
+}
 
-function clampCount(n: unknown): number {
-  const x = typeof n === 'number' && Number.isFinite(n) ? Math.round(n) : 15;
+function readRequestedCount(raw: unknown): number | null {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return Math.round(raw);
+  if (typeof raw === 'string' && /^\d+$/.test(raw.trim())) return parseInt(raw.trim(), 10);
+  return null;
+}
+
+function clampCount(raw: unknown): number {
+  const n = readRequestedCount(raw);
+  const x = n != null && n > 0 ? n : 20;
   return Math.max(1, Math.min(50, x));
 }
 
@@ -36,7 +48,7 @@ export async function parseZipdjPrompt(userPrompt: string): Promise<ZipdjParsedP
     ...openAiTemperatureOptions(0.25),
     response_format: { type: 'json_object' },
     messages: [
-      { role: 'system', content: SYSTEM },
+      { role: 'system', content: routerSystemWithToday() },
       {
         role: 'user',
         content: `User request:\n"""${userPrompt.slice(0, 12000)}"""\n\nReturn JSON with keys:

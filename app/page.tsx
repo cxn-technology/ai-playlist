@@ -3,6 +3,7 @@ import {
   ListMusic,
   MessageSquareText,
   Radio,
+  Search,
   UploadCloud,
 } from "lucide-react";
 import Link from "next/link";
@@ -245,6 +246,17 @@ export default function Home() {
             <h2 className="text-xl font-bold">Bulk ZipDJ CSV</h2>
             <p className="mt-2 text-sm text-slate-300">
               Ingest ZipDJ metadata and embeddings into zipdj_tracks_ai (no audio decode).
+            </p>
+          </Link>
+
+          <Link
+            href="/zipdj-catalog"
+            className="group rounded-2xl border border-slate-700/70 bg-slate-900/60 p-6 transition hover:-translate-y-0.5 hover:border-primary/45"
+          >
+            <Search className="mb-4 h-6 w-6 text-primary" />
+            <h2 className="text-xl font-bold">ZipDJ catalog search</h2>
+            <p className="mt-2 text-sm text-slate-300">
+              Vector search and browse zipdj_tracks_ai with filters, pagination, and previews.
             </p>
           </Link>
         </section>
