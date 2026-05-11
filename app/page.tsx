@@ -1,5 +1,11 @@
+import {
+  FileSpreadsheet,
+  ListMusic,
+  MessageSquareText,
+  Radio,
+  UploadCloud,
+} from "lucide-react";
 import Link from "next/link";
-import { Search, UploadCloud, Sparkles, Radio, ListMusic, MessageSquareText, FileSpreadsheet } from "lucide-react";
 import { APP_CONFIG } from "@/config/app-theme";
 
 export default function Home() {
@@ -23,11 +29,14 @@ export default function Home() {
             <div className="space-y-4">
               <h1 className="text-4xl font-black leading-[0.95] tracking-tight sm:text-6xl">
                 AI playlist tooling
-                <span className="mt-2 block text-primary">for live set architects</span>
+                <span className="mt-2 block text-primary">
+                  for live set architects
+                </span>
               </h1>
               <p className="max-w-2xl text-base text-slate-300 sm:text-lg">
-                Generate event-driven playlists, search by vibe, and ingest tracks with embeddings.
-                All flows run on your shared theme and smart recommendation pipeline.
+                Generate event-driven playlists, search by vibe, and ingest
+                tracks with embeddings. All flows run on your shared theme and
+                smart recommendation pipeline.
               </p>
             </div>
 
@@ -40,25 +49,11 @@ export default function Home() {
                 Prompt playlist
               </Link>
               <Link
-                href="/zipdj-prompt"
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-900/80 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-primary/50 hover:text-white"
-              >
-                <MessageSquareText className="h-4 w-4" />
-                ZipDJ prompt
-              </Link>
-              <Link
-                href="/create-playlist"
+                href="/creator/bulk-csv"
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/70 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-primary/50 hover:text-white"
               >
-                <Sparkles className="h-4 w-4" />
-                Energy curve playlist
-              </Link>
-              <Link
-                href="/search"
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/70 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-primary/50 hover:text-white"
-              >
-                <Search className="h-4 w-4" />
-                Search Tracks
+                <FileSpreadsheet className="h-4 w-4" />
+                Bulk CSV ingest
               </Link>
               <Link
                 href="/browse"
@@ -78,20 +73,44 @@ export default function Home() {
             <svg viewBox="0 0 420 180" className="h-auto w-full" aria-hidden>
               <defs>
                 <linearGradient id="djGlow" x1="0%" x2="100%" y1="0%" y2="0%">
-                  <stop offset="0%" stopColor={APP_CONFIG.theme.primary} stopOpacity="0.2" />
-                  <stop offset="50%" stopColor={APP_CONFIG.theme.primary} stopOpacity="1" />
-                  <stop offset="100%" stopColor={APP_CONFIG.theme.primary} stopOpacity="0.2" />
+                  <stop
+                    offset="0%"
+                    stopColor={APP_CONFIG.theme.primary}
+                    stopOpacity="0.2"
+                  />
+                  <stop
+                    offset="50%"
+                    stopColor={APP_CONFIG.theme.primary}
+                    stopOpacity="1"
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor={APP_CONFIG.theme.primary}
+                    stopOpacity="0.2"
+                  />
                 </linearGradient>
               </defs>
               {/* Deck base */}
-              <rect x="30" y="20" width="360" height="130" rx="18" fill="#0a1427" stroke="#1e2a44" />
+              <rect
+                x="30"
+                y="20"
+                width="360"
+                height="130"
+                rx="18"
+                fill="#0a1427"
+                stroke="#1e2a44"
+              />
 
               {/* Left platter */}
               <g transform="translate(130 86)">
                 <circle r="42" fill="#08101f" stroke="#1d355e" />
                 <circle r="31" fill="none" stroke="#27487c" />
                 <circle r="9" fill={APP_CONFIG.theme.primary} />
-                <g stroke="url(#djGlow)" strokeWidth="2.2" strokeLinecap="round">
+                <g
+                  stroke="url(#djGlow)"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                >
                   <line x1="-28" y1="0" x2="-37" y2="0">
                     <animateTransform
                       attributeName="transform"
@@ -144,7 +163,15 @@ export default function Home() {
 
               {/* Mixer bars */}
               {[188, 203, 218].map((x, i) => (
-                <rect key={x} x={x} y="48" width="6" height="62" rx="3" fill="#1b2f52">
+                <rect
+                  key={x}
+                  x={x}
+                  y="48"
+                  width="6"
+                  height="62"
+                  rx="3"
+                  fill="#1b2f52"
+                >
                   <animate
                     attributeName="y"
                     values={`${48 + i * 4};${70 - i * 6};${52 + i * 2};${48 + i * 4}`}
@@ -176,24 +203,14 @@ export default function Home() {
             </p>
           </Link>
           <Link
-            href="/create-playlist"
+            href="/creator/bulk-csv"
             className="group rounded-2xl border border-slate-700/70 bg-slate-900/60 p-6 transition hover:-translate-y-0.5 hover:border-primary/45"
           >
-            <Sparkles className="mb-4 h-6 w-6 text-primary" />
-            <h2 className="text-xl font-bold">Energy curve playlist</h2>
+            <FileSpreadsheet className="mb-4 h-6 w-6 text-primary" />
+            <h2 className="text-xl font-bold">Bulk CSV ingest</h2>
             <p className="mt-2 text-sm text-slate-300">
-              Structured sets by event type, genres, and segment energy flow.
-            </p>
-          </Link>
-
-          <Link
-            href="/search"
-            className="group rounded-2xl border border-slate-700/70 bg-slate-900/60 p-6 transition hover:-translate-y-0.5 hover:border-primary/45"
-          >
-            <Search className="mb-4 h-6 w-6 text-primary" />
-            <h2 className="text-xl font-bold">Search Mode</h2>
-            <p className="mt-2 text-sm text-slate-300">
-              Explore similar songs and navigate related recommendations.
+              Upload a catalog CSV, queue rows, and ingest audio or YouTube
+              metadata with embeddings.
             </p>
           </Link>
 
@@ -215,7 +232,8 @@ export default function Home() {
             <UploadCloud className="mb-4 h-6 w-6 text-primary" />
             <h2 className="text-xl font-bold">Song Ingestion</h2>
             <p className="mt-2 text-sm text-slate-300">
-              Extract features and insert embeddings — or use bulk CSV with URLs.
+              Extract features and insert embeddings — or use bulk CSV with
+              URLs.
             </p>
           </Link>
 
