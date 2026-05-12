@@ -28,6 +28,66 @@ type ZipdjRecTrack = {
   vecDist?: number;
 };
 
+type FastSearchMatchStats = {
+  linesParsed?: number;
+  candidateCount?: number;
+  searchedCount?: number;
+  capUsed?: number;
+  embedBatchCalls?: number;
+  vectorSqlQueries?: number;
+  vectorConcurrencyWaves?: number;
+  tracksReturned?: number;
+} | null;
+
+type FastSearchResponse = {
+  answer?: string;
+  tracks?: unknown[];
+  matchStats?: FastSearchMatchStats;
+  timingsMs?: Record<string, number>;
+  message?: string;
+};
+
+function parseAnswerToGuessList(answer: string): WebGuessRow[] {
+  const lines = answer.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const out: WebGuessRow[] = [];
+  for (const line of lines) {
+    const numbered = line.match(/^\d+\.\s*(.+)$/);
+    const body = numbered ? numbered[1]!.trim() : line;
+    const dash = body.match(/^(.+?)\s*[-–—]\s+(.+)$/);
+    if (dash) {
+      out.push({ title: dash[1]!.trim(), artist: dash[2]!.trim() });
+    } else {
+      out.push({ title: body, artist: null });
+    }
+  }
+  return out;
+}
+
+function asZipdjRecTrack(t: unknown): ZipdjRecTrack | null {
+  if (!t || typeof t !== "object") return null;
+  const o = t as Record<string, unknown>;
+  const id = o.trackId;
+  if (typeof id !== "string" || !id.trim()) return null;
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  const nullable = (v: unknown) => (typeof v === "string" ? v : null);
+  return {
+    trackId: id,
+    releaseName: str(o.releaseName),
+    trackName: str(o.trackName),
+    trackUrl: typeof o.trackUrl === "string" ? o.trackUrl : null,
+    artistsName: nullable(o.artistsName),
+    genre: nullable(o.genre),
+    tags: nullable(o.tags),
+    labelName: nullable(o.labelName),
+    labelId: nullable(o.labelId),
+    releaseId: nullable(o.releaseId),
+    trackCreatedDate: nullable(o.trackCreatedDate),
+    releaseCreatedDate: nullable(o.releaseCreatedDate),
+    source: o.source === "vector" ? "vector" : "web",
+    vecDist: typeof o.vecDist === "number" ? o.vecDist : undefined,
+  };
+}
+
 export default function ZipdjPromptPage() {
   const [promptText, setPromptText] = useState("");
   const [parsed, setParsed] = useState<ZipdjParsedPrompt | null>(null);
@@ -37,6 +97,7 @@ export default function ZipdjPromptPage() {
   const [info, setInfo] = useState<string | null>(null);
   const [aiSdkDebug, setAiSdkDebug] = useState<unknown | null>(null);
   const [webGuessList, setWebGuessList] = useState<WebGuessRow[] | null>(null);
+  const [formattedAnswer, setFormattedAnswer] = useState<string | null>(null);
   const [playingUrl, setPlayingUrl] = useState<{
     url: string;
     title: string;
@@ -56,31 +117,63 @@ export default function ZipdjPromptPage() {
     setInfo(null);
     setAiSdkDebug(null);
     setWebGuessList(null);
+    setFormattedAnswer(null);
     if (!promptText.trim()) {
       setError("Enter a prompt.");
       return;
     }
     setLoading(true);
     try {
-      const res = await fetch("/api/zipdj/prompt", {
+      const res = await fetch("/api/zipdj/fast-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: promptText }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as FastSearchResponse & { error?: string };
       if (!res.ok) throw new Error(data.error || "Request failed");
-      setParsed(data.parsed ?? null);
-      setTracks(data.tracks ?? []);
-      if (data.message) setInfo(data.message);
-      setAiSdkDebug(data.aiSdkWeb ?? null);
-      const guess = data.webExtractedCandidates;
-      setWebGuessList(Array.isArray(guess) ? guess : null);
+
+      const answer = typeof data.answer === "string" ? data.answer : "";
+      setFormattedAnswer(answer.trim() ? answer : null);
+
+      const guesses = answer.trim() ? parseAnswerToGuessList(answer) : [];
+      setWebGuessList(guesses.length > 0 ? guesses : null);
+
+      const rawTracks = Array.isArray(data.tracks) ? data.tracks : [];
+      const mapped = rawTracks.map(asZipdjRecTrack).filter((x): x is ZipdjRecTrack => x != null);
+      setTracks(mapped);
+
+      const ms = data.matchStats;
+      const capUsed =
+        typeof ms?.capUsed === "number"
+          ? ms.capUsed
+          : typeof ms?.tracksReturned === "number"
+            ? ms.tracksReturned
+            : mapped.length || 20;
+
+      setParsed({
+        mode: "web_then_match",
+        embedding_narrative: answer.trim() ? answer : "(no formatted answer)",
+        web_query:
+          ms != null
+            ? `Fast search · ${ms.linesParsed ?? 0} lines parsed · ${ms.searchedCount ?? 0} vector lookups`
+            : "Fast search API (SerpAPI → OpenAI formatter → catalog)",
+        requested_count: Math.max(capUsed, mapped.length, 1),
+      });
+
+      if (data.message?.trim()) setInfo(data.message.trim());
+
+      setAiSdkDebug({
+        timingsMs: data.timingsMs ?? null,
+        matchStats: data.matchStats ?? null,
+        answerPreview: answer.trim() ? answer.slice(0, 8000) : null,
+      });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed");
       setParsed(null);
       setTracks([]);
       setAiSdkDebug(null);
       setWebGuessList(null);
+      setFormattedAnswer(null);
     } finally {
       setLoading(false);
     }
@@ -112,22 +205,15 @@ export default function ZipdjPromptPage() {
         <h1 className="mb-2 text-3xl font-black tracking-tight sm:text-4xl">ZipDJ prompt</h1>
         <p className="mb-8 max-w-2xl text-slate-400">
           Search the <code className="text-slate-300">zipdj_tracks_ai</code> table by vibe. Chart /
-          trending asks use the{" "}
-          <a
-            href="https://ai-sdk.dev/"
-            className="text-primary underline-offset-2 hover:underline"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Vercel AI SDK
-          </a>{" "}
-          with OpenAI Responses + <code className="text-slate-400">web_search_preview</code>,
-          structured JSON, then nearest-neighbor match in your catalog (same 384-d embeddings).
-          Matched tracks are shown in the same table layout as{" "}
+          trending asks use a <strong className="font-semibold text-slate-200">fast search service</strong>{" "}
+          (SerpAPI Google AI Mode → OpenAI formatter with ZIPDJ line rules → catalog vector match). Results
+          show in the same table layout as{" "}
           <Link href="/zipdj-catalog" className="text-primary underline-offset-2 hover:underline">
             ZipDJ catalog
           </Link>{" "}
-          (release + track, artists, label, genre, dates).
+          (release + track, artists, label, genre, dates). The proxy reads{" "}
+          <code className="text-slate-400">ZIPDJ_SEARCH_API_BASE</code> (default{" "}
+          <code className="text-slate-400">http://127.0.0.1:4004</code>).
         </p>
 
         {error && (
@@ -167,7 +253,7 @@ export default function ZipdjPromptPage() {
             {parsed.mode === "web_then_match" && parsed.web_query && (
               <>
                 {" "}
-                · <span className="font-semibold text-slate-300">Web query:</span> {parsed.web_query}
+                · <span className="font-semibold text-slate-300">Pipeline:</span> {parsed.web_query}
               </>
             )}
           </div>
@@ -176,11 +262,11 @@ export default function ZipdjPromptPage() {
         {webGuessList != null && webGuessList.length > 0 && (
           <div className="mt-4 rounded-2xl border border-violet-900/40 bg-slate-900/60 p-4">
             <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-violet-300/90">
-              Structured chart list (AI SDK + web search)
+              Parsed lines (Release — Artists)
             </h2>
             <p className="mb-3 text-xs text-slate-500">
-              From <code className="text-slate-400">Output.object</code> after OpenAI web search
-              (before vector match to <code className="text-slate-400">zipdj_tracks_ai</code>).
+              Parsed from the formatted <code className="text-slate-400">answer</code> text before catalog
+              match.
             </p>
             <ol className="list-decimal space-y-1.5 pl-5 text-sm text-slate-200">
               {webGuessList.map((g, i) => (
@@ -195,16 +281,33 @@ export default function ZipdjPromptPage() {
           </div>
         )}
 
-        {parsed?.mode === "web_then_match" && webGuessList != null && webGuessList.length === 0 && (
-          <p className="mt-4 text-xs text-slate-500">
-            No structured tracks returned (web search failed or model returned an empty list).
-          </p>
+        {webGuessList == null && formattedAnswer != null && formattedAnswer.trim() !== "" && (
+          <div className="mt-4 rounded-2xl border border-violet-900/40 bg-slate-900/60 p-4">
+            <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-violet-300/90">
+              Formatted answer
+            </h2>
+            <p className="mb-3 text-xs text-slate-500">
+              Raw pipeline text (numbered ZIPDJ-style lines when the formatter succeeded).
+            </p>
+            <pre className="max-h-[min(50vh,420px)] overflow-auto whitespace-pre-wrap break-words rounded-xl border border-slate-800 bg-[#0a0f18] p-3 text-xs leading-relaxed text-slate-200">
+              {formattedAnswer}
+            </pre>
+          </div>
         )}
+
+        {parsed?.mode === "web_then_match" &&
+          webGuessList != null &&
+          webGuessList.length === 0 &&
+          !formattedAnswer?.trim() && (
+            <p className="mt-4 text-xs text-slate-500">
+              No formatted answer or parseable lines returned for this prompt.
+            </p>
+          )}
 
         {aiSdkDebug != null && (
           <details className="mt-4 rounded-2xl border border-cyan-900/50 bg-slate-950/80 p-4 text-sm open:shadow-lg">
             <summary className="cursor-pointer font-semibold text-cyan-300/90 select-none">
-              AI SDK web run (structured output + sources + model text)
+              Pipeline debug (timings + match stats)
             </summary>
             <pre className="mt-3 max-h-[min(70vh,560px)] overflow-auto rounded-xl border border-slate-800 bg-[#0a0f18] p-3 text-xs leading-relaxed text-slate-300 whitespace-pre-wrap break-words">
               {JSON.stringify(aiSdkDebug, null, 2)}
@@ -226,7 +329,7 @@ export default function ZipdjPromptPage() {
                     {parsed && (
                       <span className="text-slate-600">
                         {" "}
-                        · {parsed.mode === "web_then_match" ? "web + vector match" : "vector match"}
+                        · {parsed.mode === "web_then_match" ? "fast search + catalog match" : "vector match"}
                       </span>
                     )}
                   </>
@@ -329,7 +432,6 @@ export default function ZipdjPromptPage() {
             </div>
           </div>
         )}
-
       </div>
 
       {playingUrl && (

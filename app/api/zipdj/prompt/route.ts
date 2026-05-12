@@ -6,7 +6,8 @@ import { vectorSearchZipdj, type ZipdjRow } from '@/lib/server/matchZipdjCatalog
 import { matchWebTrackTitlesToZipdjCatalog } from '@/lib/server/zipdjWebCatalogMatch';
 import { computeTemporalContext } from '@/lib/server/zipdjTemporalContext';
 
-export const maxDuration = 120;
+/** Allow long OpenAI + web_search runs (local dev / self-hosted). */
+export const maxDuration = 600;
 
 function serializeTrack(
   r: ZipdjRow,
@@ -34,7 +35,13 @@ function serializeTrack(
 const WEB_OVERFETCH = 3;
 const WEB_FETCH_CAP = 150;
 
+function nowMs() {
+  return performance.now();
+}
+
 export async function POST(req: Request) {
+  const t0 = nowMs();
+  const timingsMs: Record<string, number> = {};
   try {
     const body = await req.json();
     const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
@@ -42,8 +49,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'prompt is required' }, { status: 400 });
     }
 
+    let t = nowMs();
     const parsed = await parseZipdjPrompt(prompt);
+    timingsMs.parseZipdjPrompt = Math.round(nowMs() - t);
+
+    t = nowMs();
     const queryVector = await embedTextToVectorLiteral(parsed.embedding_narrative);
+    timingsMs.embedNarrative = Math.round(nowMs() - t);
+
     const cap = parsed.requested_count;
     const poolSize = Math.min(Math.max(cap * 4, cap), 200);
 
@@ -58,10 +71,13 @@ export async function POST(req: Request) {
       stepCount: number;
     } | null = null;
 
+    t = nowMs();
     const vectorHits = await vectorSearchZipdj(queryVector, poolSize);
+    timingsMs.vectorPoolSearch = Math.round(nowMs() - t);
 
     if (parsed.mode === 'semantic_only') {
       const sliced = vectorHits.slice(0, cap);
+      timingsMs.total = Math.round(nowMs() - t0);
       return NextResponse.json({
         parsed,
         tracks: sliced.map((r) => serializeTrack(r, 'vector', r.vec_dist)),
@@ -72,24 +88,30 @@ export async function POST(req: Request) {
         tavilyResponse,
         webExtractedCandidates: null,
         aiSdkWeb: null,
+        timingsMs,
+        timingMeta: { poolSize, cap, mode: 'semantic_only' as const },
       });
     }
 
     let webPairs: { row: ZipdjRow; vecDist: number }[] = [];
 
+    let webFetchCount = 0;
+    let catalogMatchInputCount = 0;
     try {
       const q = parsed.web_query?.trim();
       if (!q) {
         notice = 'No web query from router; using catalog similarity only.';
       } else {
-        const webFetchCount = Math.min(cap * WEB_OVERFETCH, WEB_FETCH_CAP);
+        webFetchCount = Math.min(cap * WEB_OVERFETCH, WEB_FETCH_CAP);
         const temporalContext = computeTemporalContext(prompt);
+        t = nowMs();
         const ai = await runZipdjWebSearchWithAiSdk({
           originalPrompt: prompt,
           webQuery: q,
           maxTracks: webFetchCount,
           temporalContext,
         });
+        timingsMs.runZipdjWebSearchWithAiSdk = Math.round(nowMs() - t);
         aiSdkWeb = {
           output: ai.output,
           sources: ai.sources,
@@ -102,11 +124,14 @@ export async function POST(req: Request) {
         }));
 
         const titles = ai.output.tracks;
+        catalogMatchInputCount = titles.length;
         if (titles.length > 0) {
+          t = nowMs();
           webPairs = await matchWebTrackTitlesToZipdjCatalog(
             titles.map((t) => ({ title: t.title, artist: t.artist })),
             cap
           );
+          timingsMs.matchWebTrackTitlesToZipdjCatalog = Math.round(nowMs() - t);
         }
       }
     } catch (e) {
@@ -134,6 +159,8 @@ export async function POST(req: Request) {
       merged.push(serializeTrack(r, 'vector', r.vec_dist));
     }
 
+    timingsMs.total = Math.round(nowMs() - t0);
+
     return NextResponse.json({
       parsed,
       tracks: merged,
@@ -141,6 +168,14 @@ export async function POST(req: Request) {
       tavilyResponse,
       webExtractedCandidates,
       aiSdkWeb,
+      timingsMs,
+      timingMeta: {
+        poolSize,
+        cap,
+        webFetchCount,
+        catalogMatchInputCount,
+        mode: 'web_then_match' as const,
+      },
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'ZipDJ prompt failed';
